@@ -1,0 +1,28 @@
+{
+  "version": "1.0.8",
+  "date": "2026-03",
+  "notes": {
+    "de": {
+      "title": "Zusatztools",
+      "items": [
+        "Neue Tools-Sektion in den Einstellungen für Zusatzwerkzeuge",
+        "MX9 Sensoreinmessung: Berechnung der Hebelarme (Lever Arms) für DMI und GAMS aus 5 Tachymeter-Messpunkten",
+        "CSV/TXT-Import der Messpunkte mit automatischer Formaterkennung",
+        "GAMS Phasenzentrum-Offset konfigurierbar (Standard: Trimble GA830)",
+        "Interaktive Koordinaten-Visualisierung mit Draufsicht und Seitenansicht",
+        "Bildergalerien mit Zoom-Funktion zur Erklärung der Messpunkte und Achsen"
+      ]
+    },
+    "en": {
+      "title": "Additional Tools",
+      "items": [
+        "New Tools section in Settings for additional utilities",
+        "MX9 Sensor Calibration: Lever arm calculation for DMI and GAMS from 5 total station measurements",
+        "CSV/TXT import of measurement points with automatic format detection",
+        "GAMS phase center offset configurable (default: Trimble GA830)",
+        "Interactive coordinate visualization with top view and side view",
+        "Image galleries with zoom for explaining measurement points and axes"
+      ]
+    }
+  }
+}
