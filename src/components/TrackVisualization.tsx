@@ -1,4 +1,5 @@
 import { FixedPoint, TrackedPoint } from '../db/models'
+import { calculateDistance, calculateBearing, projectPosition } from '../utils/kmCalculation'
 
 interface TrackVisualizationProps {
   allFixedPoints: FixedPoint[]
@@ -196,7 +197,7 @@ function calculateNearbyPoints(
   const MAX_PERPENDICULAR_DISTANCE = 25
 
   // Step 1: Find track direction from tracked points using Gleismitte (track centerline)
-  const trackedCenterlines: { easting: number; northing: number; distance: number }[] = []
+  const trackedCenterlines: { longitude: number; latitude: number; distance: number }[] = []
 
   for (const tp of trackedPoints) {
     const fixedPoint = allFixedPoints.find(p => p.id === tp.pointId)
@@ -205,7 +206,7 @@ function calculateNearbyPoints(
     // Find paired point (within PAIR_THRESHOLD)
     const pairedPoint = allFixedPoints.find(p => {
       if (p.id === fixedPoint.id) return false
-      const dist = calculateDistance(fixedPoint.easting, fixedPoint.northing, p.easting, p.northing)
+      const dist = calculateDistance(fixedPoint.longitude, fixedPoint.latitude, p.longitude, p.latitude)
       return dist <= PAIR_THRESHOLD && dist > 0.5 // At least 0.5m apart to be a valid pair
     })
 
@@ -213,21 +214,21 @@ function calculateNearbyPoints(
     let centerE: number, centerN: number
     if (pairedPoint) {
       // Use midpoint of pair
-      centerE = (fixedPoint.easting + pairedPoint.easting) / 2
-      centerN = (fixedPoint.northing + pairedPoint.northing) / 2
+      centerE = (fixedPoint.longitude + pairedPoint.longitude) / 2
+      centerN = (fixedPoint.latitude + pairedPoint.latitude) / 2
     } else {
       // Single point - use as-is (will be offset calculation later if needed)
-      centerE = fixedPoint.easting
-      centerN = fixedPoint.northing
+      centerE = fixedPoint.longitude
+      centerN = fixedPoint.latitude
     }
 
     // Avoid duplicates (paired points would create same centerline)
     const isDuplicate = trackedCenterlines.some(tc =>
-      Math.abs(tc.easting - centerE) < 0.1 && Math.abs(tc.northing - centerN) < 0.1
+      Math.abs(tc.longitude - centerE) < 0.1 && Math.abs(tc.latitude - centerN) < 0.1
     )
 
     if (!isDuplicate) {
-      trackedCenterlines.push({ easting: centerE, northing: centerN, distance: tp.localDistance })
+      trackedCenterlines.push({ longitude: centerE, latitude: centerN, distance: tp.localDistance })
     }
   }
 
@@ -238,8 +239,8 @@ function calculateNearbyPoints(
   const prevCenter = trackedCenterlines[trackedCenterlines.length - 2]
 
   // Calculate direction vector
-  const vectorE = lastCenter.easting - prevCenter.easting
-  const vectorN = lastCenter.northing - prevCenter.northing
+  const vectorE = lastCenter.longitude - prevCenter.longitude
+  const vectorN = lastCenter.latitude - prevCenter.latitude
   const vectorLength = Math.sqrt(vectorE * vectorE + vectorN * vectorN)
 
   if (vectorLength < 1) return [] // Too close, can't determine direction
@@ -249,8 +250,8 @@ function calculateNearbyPoints(
 
   // Step 2: Calculate current vehicle position along track
   const distanceTraveled = currentDistance - lastCenter.distance
-  const currentE = lastCenter.easting + normalizedE * distanceTraveled
-  const currentN = lastCenter.northing + normalizedN * distanceTraveled
+  const currentE = lastCenter.longitude + normalizedE * distanceTraveled
+  const currentN = lastCenter.latitude + normalizedN * distanceTraveled
 
   // Step 3: Group all fixed points into stations (pairs)
   const processedPoints = new Set<string>()
@@ -262,7 +263,7 @@ function calculateNearbyPoints(
     // Find paired point
     const pairedPoint = allFixedPoints.find(p => {
       if (p.id === point.id || processedPoints.has(p.id)) return false
-      const dist = calculateDistance(point.easting, point.northing, p.easting, p.northing)
+      const dist = calculateDistance(point.longitude, point.latitude, p.longitude, p.latitude)
       return dist <= PAIR_THRESHOLD && dist > 0.5
     })
 
@@ -276,11 +277,11 @@ function calculateNearbyPoints(
 
     // Calculate station centerline
     const centerE = pairedPoint
-      ? (point.easting + pairedPoint.easting) / 2
-      : point.easting
+      ? (point.longitude + pairedPoint.longitude) / 2
+      : point.longitude
     const centerN = pairedPoint
-      ? (point.northing + pairedPoint.northing) / 2
-      : point.northing
+      ? (point.latitude + pairedPoint.latitude) / 2
+      : point.latitude
 
     stations.push({ points: stationPoints, centerE, centerN })
   }
@@ -298,8 +299,8 @@ function calculateNearbyPoints(
 
   for (const station of stations) {
     // Vector from track origin (prevCenter) to station center
-    const toStationE = station.centerE - prevCenter.easting
-    const toStationN = station.centerN - prevCenter.northing
+    const toStationE = station.centerE - prevCenter.longitude
+    const toStationN = station.centerN - prevCenter.latitude
 
     // Distance along track (dot product)
     const distanceAlongTrack = toStationE * normalizedE + toStationN * normalizedN
@@ -318,8 +319,8 @@ function calculateNearbyPoints(
   }
 
   // Step 5: Calculate current position's distance along track
-  const toCurrentE = currentE - prevCenter.easting
-  const toCurrentN = currentN - prevCenter.northing
+  const toCurrentE = currentE - prevCenter.longitude
+  const toCurrentN = currentN - prevCenter.latitude
   const currentDistanceAlongTrack = toCurrentE * normalizedE + toCurrentN * normalizedN
 
   // Step 6: Sort stations by distance along track
@@ -370,8 +371,8 @@ function calculateNearbyPoints(
 
       // Use cross product to determine which side each point is on
       // Relative to track direction, positive cross = left (top), negative = right (bottom)
-      const toP1E = p1.easting - station.centerE
-      const toP1N = p1.northing - station.centerN
+      const toP1E = p1.longitude - station.centerE
+      const toP1N = p1.latitude - station.centerN
 
       // Cross product: directionE * pointN - directionN * pointE
       const cross1 = normalizedE * toP1N - normalizedN * toP1E
@@ -386,8 +387,8 @@ function calculateNearbyPoints(
     } else {
       // Single point - determine side based on cross product from track
       const point = station.points[0]
-      const toPointE = point.easting - currentE
-      const toPointN = point.northing - currentN
+      const toPointE = point.longitude - currentE
+      const toPointN = point.latitude - currentN
       const cross = normalizedE * toPointN - normalizedN * toPointE
 
       if (cross > 0) {
@@ -411,15 +412,4 @@ function calculateNearbyPoints(
   }
 
   return result
-}
-
-function calculateDistance(
-  easting1: number,
-  northing1: number,
-  easting2: number,
-  northing2: number
-): number {
-  const dE = easting2 - easting1
-  const dN = northing2 - northing1
-  return Math.sqrt(dE * dE + dN * dN)
 }

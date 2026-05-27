@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 
 interface ActiveRunInfo {
   projectId: string
+  jobId: string
   runId: string
   runName: string
 }
@@ -15,7 +16,7 @@ interface ActiveRunContextType {
 
 const ActiveRunContext = createContext<ActiveRunContextType | undefined>(undefined)
 
-const STORAGE_KEY = 'gedo-active-run'
+const STORAGE_KEY = 'mmc-active-run'
 
 export function ActiveRunProvider({ children }: { children: ReactNode }) {
   const [activeRun, setActiveRunState] = useState<ActiveRunInfo | null>(() => {

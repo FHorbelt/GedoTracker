@@ -6,12 +6,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icons/*.png'],
+      registerType: 'prompt',
+      includeAssets: ['icons/favicon.png', 'icons/*.png'],
       manifest: {
-        name: 'Gedo Scan Tracker',
-        short_name: 'GedoTracker',
-        description: 'Messfahrten-Tracking für Gedo Scan Systeme',
+        name: 'Mobile Mapping Companion',
+        short_name: 'MMCompanion',
+        description: 'Messfahrten-Tracking für Mobile Mapping Systeme',
         theme_color: '#1e40af',
         background_color: '#f8fafc',
         display: 'standalone',
@@ -42,5 +42,5 @@ export default defineConfig({
       }
     })
   ],
-  base: './'
+  base: '/'
 })

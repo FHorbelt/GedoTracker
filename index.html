@@ -2,18 +2,30 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+    <link rel="icon" type="image/png" href="/icons/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#1e40af" />
-    <meta name="description" content="Messfahrten-Tracking für Gedo Scan Systeme" />
+    <meta name="description" content="Messfahrten-Tracking für Mobile Mapping Systeme" />
 
     <!-- iOS PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="GedoTracker" />
+    <meta name="apple-mobile-web-app-title" content="MMCompanion" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
 
-    <title>Gedo Scan Tracker</title>
+    <title>Mobile Mapping Companion</title>
+
+    <!-- Prevent flash of wrong theme -->
+    <script>
+      (function() {
+        const theme = localStorage.getItem('mmc-theme');
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

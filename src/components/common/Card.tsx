@@ -9,12 +9,19 @@ interface CardProps {
 
 export function Card({ children, className = '', onClick, hoverable }: CardProps) {
   return (
-    <div 
+    <div
       className={`
-        bg-white rounded-xl border border-slate-200 shadow-sm
-        ${hoverable ? 'hover:shadow-md hover:border-slate-300 transition-all cursor-pointer' : ''}
+        rounded-xl shadow-sm
+        ${hoverable ? 'hover:shadow-md transition-all cursor-pointer' : ''}
         ${className}
       `}
+      style={{
+        backgroundColor: 'var(--color-bg-card)',
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: 'var(--color-border)',
+        color: 'var(--color-text)'
+      }}
       onClick={onClick}
     >
       {children}
@@ -29,7 +36,7 @@ interface CardHeaderProps {
 
 export function CardHeader({ children, className = '' }: CardHeaderProps) {
   return (
-    <div className={`p-4 border-b border-slate-200 ${className}`}>
+    <div className={`p-4 ${className}`} style={{ borderBottom: '1px solid var(--color-border)' }}>
       {children}
     </div>
   )

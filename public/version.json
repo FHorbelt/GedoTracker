@@ -1,0 +1,28 @@
+{
+  "version": "1.0.9",
+  "date": "2026-03",
+  "notes": {
+    "de": {
+      "title": "GNSS-Verbesserungen & Update-Benachrichtigung",
+      "items": [
+        "GNSS-Trajektorie: Live-Anzeige der gefahrenen Strecke wird nicht mehr unterbrochen",
+        "Festpunkt-Badges ohne Solltrasse: Punkte werden jetzt auch per GPS-Bearing und Luftlinie erkannt",
+        "Abbrechen-Button beim Anlegen einer neuen Messfahrt",
+        "Update-Benachrichtigung zeigt aktuelle und neue Versionsnummer an",
+        "Release Notes direkt in der Update-Benachrichtigung einsehbar",
+        "Allgemeine Verbesserungen und Bugfixes"
+      ]
+    },
+    "en": {
+      "title": "GNSS Improvements & Update Notification",
+      "items": [
+        "GNSS trajectory: Live track display no longer gets interrupted",
+        "Fixed point badges without reference trajectory: Points are now detected via GPS bearing and direct distance",
+        "Cancel button when creating a new run",
+        "Update notification now shows current and new version number",
+        "Release notes viewable directly in the update notification",
+        "General improvements and bug fixes"
+      ]
+    }
+  }
+}

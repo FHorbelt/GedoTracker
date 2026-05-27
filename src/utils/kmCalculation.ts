@@ -1,26 +1,111 @@
-import { FixedPoint, TrackedPoint } from '../db/models'
+import { FixedPoint, TrackedPoint, GpsPoint } from '../db/models'
+
+// Earth's radius in meters (WGS84 mean radius)
+const EARTH_RADIUS = 6371008.8
 
 interface ReferencePoint {
   pointId: string
   pointNumber: string
   kmValue: number
   localDistance: number // Distance from run start in meters
-  easting: number
-  northing: number
+  longitude: number
+  latitude: number
 }
 
 /**
- * Calculate the distance between two points in GK/DBREF coordinates
+ * Convert degrees to radians
+ */
+function toRadians(degrees: number): number {
+  return degrees * (Math.PI / 180)
+}
+
+/**
+ * Calculate the distance between two points using the Haversine formula (WGS84)
+ * Returns distance in meters
  */
 export function calculateDistance(
-  easting1: number, 
-  northing1: number, 
-  easting2: number, 
-  northing2: number
+  lon1: number,
+  lat1: number,
+  lon2: number,
+  lat2: number
 ): number {
-  const dE = easting2 - easting1
-  const dN = northing2 - northing1
-  return Math.sqrt(dE * dE + dN * dN)
+  const φ1 = toRadians(lat1)
+  const φ2 = toRadians(lat2)
+  const Δφ = toRadians(lat2 - lat1)
+  const Δλ = toRadians(lon2 - lon1)
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+  return EARTH_RADIUS * c
+}
+
+/**
+ * Calculate bearing (azimuth) from point 1 to point 2
+ * Returns bearing in radians (0 = North, π/2 = East)
+ */
+export function calculateBearing(
+  lon1: number,
+  lat1: number,
+  lon2: number,
+  lat2: number
+): number {
+  const φ1 = toRadians(lat1)
+  const φ2 = toRadians(lat2)
+  const Δλ = toRadians(lon2 - lon1)
+
+  const y = Math.sin(Δλ) * Math.cos(φ2)
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)
+
+  return Math.atan2(y, x)
+}
+
+/**
+ * Project a position along a bearing for a given distance
+ * Returns [longitude, latitude]
+ */
+export function projectPosition(
+  lon: number,
+  lat: number,
+  bearing: number,
+  distance: number
+): [number, number] {
+  const φ1 = toRadians(lat)
+  const λ1 = toRadians(lon)
+  const δ = distance / EARTH_RADIUS
+
+  const φ2 = Math.asin(
+    Math.sin(φ1) * Math.cos(δ) +
+    Math.cos(φ1) * Math.sin(δ) * Math.cos(bearing)
+  )
+
+  const λ2 = λ1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(δ) * Math.cos(φ1),
+    Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
+  )
+
+  return [λ2 * (180 / Math.PI), φ2 * (180 / Math.PI)]
+}
+
+/**
+ * Calculate cumulative distance along a GPS track using Haversine formula
+ * Returns total distance in meters
+ */
+export function calculateGpsTrackDistance(track: GpsPoint[]): number {
+  if (track.length < 2) return 0
+  let total = 0
+  for (let i = 1; i < track.length; i++) {
+    total += calculateDistance(
+      track[i - 1].longitude,
+      track[i - 1].latitude,
+      track[i].longitude,
+      track[i].latitude
+    )
+  }
+  return total
 }
 
 /**
@@ -74,45 +159,45 @@ export function interpolateKmValues(
 
   // Now calculate KM for points that are between references
   // We need to determine which points are on the route
-  
+
   // Build a simple line from first to last reference point
-  const lineStart = { e: firstRef.easting, n: firstRef.northing }
-  const lineEnd = { e: lastRef.easting, n: lastRef.northing }
-  
+  const lineStart = { lon: firstRef.longitude, lat: firstRef.latitude }
+  const lineEnd = { lon: lastRef.longitude, lat: lastRef.latitude }
+
   // For each point not in references, check if it's close to the line
   const refPointIds = new Set(sortedRefs.map(r => r.pointId))
-  
+
   for (const point of allPoints) {
     if (refPointIds.has(point.id)) continue
-    
-    // Project point onto line
-    const projection = projectPointOnLine(
-      point.easting, 
-      point.northing,
-      lineStart.e, 
-      lineStart.n,
-      lineEnd.e, 
-      lineEnd.n
+
+    // Project point onto line (using local planar approximation)
+    const projection = projectPointOnLineWGS84(
+      point.longitude,
+      point.latitude,
+      lineStart.lon,
+      lineStart.lat,
+      lineEnd.lon,
+      lineEnd.lat
     )
-    
+
     // Check if point is within tolerance (e.g., 10m from track)
     const distanceToLine = calculateDistance(
-      point.easting, 
-      point.northing,
-      projection.e, 
-      projection.n
+      point.longitude,
+      point.latitude,
+      projection.lon,
+      projection.lat
     )
-    
+
     const TOLERANCE = 10 // meters
-    
+
     if (distanceToLine <= TOLERANCE && projection.t >= 0 && projection.t <= 1) {
       // Point is on the route, calculate its local distance
-      const localDistance = firstRef.localDistance + 
+      const localDistance = firstRef.localDistance +
         projection.t * (lastRef.localDistance - firstRef.localDistance)
-      
+
       // Interpolate KM value
       const kmValue = firstRef.kmValue + (localDistance - firstRef.localDistance) * kmPerMeter
-      
+
       result.push({
         id: crypto.randomUUID(),
         pointId: point.id,
@@ -130,27 +215,43 @@ export function interpolateKmValues(
 }
 
 /**
- * Project a point onto a line segment
+ * Project a point onto a line segment using WGS84 coordinates
+ * Uses local planar approximation (valid for short distances)
  * Returns the projected point and parameter t (0 = start, 1 = end)
  */
-function projectPointOnLine(
-  px: number, py: number,
-  x1: number, y1: number,
-  x2: number, y2: number
-): { e: number, n: number, t: number } {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const len2 = dx * dx + dy * dy
-  
+function projectPointOnLineWGS84(
+  pLon: number, pLat: number,
+  lon1: number, lat1: number,
+  lon2: number, lat2: number
+): { lon: number, lat: number, t: number } {
+  // Convert to local planar coordinates (meters)
+  // Scale longitude by cos(latitude) to account for convergence at poles
+  const avgLat = (lat1 + lat2 + pLat) / 3
+  const cosLat = Math.cos(toRadians(avgLat))
+  const metersPerDegLon = 111320 * cosLat
+  const metersPerDegLat = 110540
+
+  // Convert to local meters
+  const px = (pLon - lon1) * metersPerDegLon
+  const py = (pLat - lat1) * metersPerDegLat
+  const x2 = (lon2 - lon1) * metersPerDegLon
+  const y2 = (lat2 - lat1) * metersPerDegLat
+
+  const len2 = x2 * x2 + y2 * y2
+
   if (len2 === 0) {
-    return { e: x1, n: y1, t: 0 }
+    return { lon: lon1, lat: lat1, t: 0 }
   }
-  
-  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2))
-  
+
+  const t = Math.max(0, Math.min(1, (px * x2 + py * y2) / len2))
+
+  // Convert back to WGS84
+  const projLon = lon1 + (t * x2) / metersPerDegLon
+  const projLat = lat1 + (t * y2) / metersPerDegLat
+
   return {
-    e: x1 + t * dx,
-    n: y1 + t * dy,
+    lon: projLon,
+    lat: projLat,
     t
   }
 }
@@ -195,6 +296,18 @@ export function extrapolateKmValues(
 }
 
 /**
+ * Round a number to specified decimal places, always rounding .5 up
+ * (avoids JavaScript's "Banker's Rounding" and floating-point issues)
+ */
+function roundHalfUp(value: number, decimals: number): string {
+  // Add a small offset to ensure .5 always rounds up (handles floating-point precision)
+  const offset = 0.5 * Math.pow(10, -(decimals + 1))
+  const multiplier = Math.pow(10, decimals)
+  const rounded = Math.floor((value + offset) * multiplier + 0.5) / multiplier
+  return rounded.toFixed(decimals)
+}
+
+/**
  * Format KM value for display
  * Input: meters (e.g., 1423.50)
  * Output: "KM 1,4 + 23,5"
@@ -208,7 +321,7 @@ export function formatKmValue(meters: number): string {
   const hektometer = Math.floor((meters % 1000) / 100)
   const rest = meters % 100
 
-  return `KM ${km},${hektometer} + ${rest.toFixed(1)}`
+  return `KM ${km},${hektometer} + ${roundHalfUp(rest, 1)}`
 }
 
 /**

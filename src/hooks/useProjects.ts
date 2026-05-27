@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db/database'
+import { db, deleteProjectWithJobs } from '../db/database'
 import { Project } from '../db/models'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -40,6 +40,22 @@ export function useProjectWithRuns(id: string | undefined) {
   return { project, runs: runs || [], isLoading }
 }
 
+export function useProjectWithJobs(id: string | undefined) {
+  const project = useLiveQuery(
+    () => id ? db.projects.get(id) : undefined,
+    [id]
+  )
+
+  const jobs = useLiveQuery(
+    () => id ? db.measurementJobs.where('projectId').equals(id).sortBy('createdAt') : [],
+    [id]
+  )
+
+  const isLoading = (project === undefined || jobs === undefined) && id !== undefined
+
+  return { project, jobs: jobs || [], isLoading }
+}
+
 export async function createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
   const now = new Date().toISOString()
   const project: Project = {
@@ -61,8 +77,6 @@ export async function updateProject(id: string, data: Partial<Project>): Promise
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await db.transaction('rw', [db.projects, db.runs], async () => {
-    await db.runs.where('projectId').equals(id).delete()
-    await db.projects.delete(id)
-  })
+  // Use the database function that also deletes measurementJobs
+  await deleteProjectWithJobs(id)
 }

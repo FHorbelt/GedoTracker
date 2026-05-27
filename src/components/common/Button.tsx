@@ -1,4 +1,5 @@
 import { ButtonHTMLAttributes, forwardRef } from 'react'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
@@ -7,15 +8,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className = '', variant = 'primary', size = 'md', isLoading, children, disabled, ...props }, ref) => {
+  ({ className = '', variant = 'primary', size = 'md', isLoading, children, disabled, style, ...props }, ref) => {
+    const { theme } = useTheme()
+    const isDark = theme === 'dark'
+
     const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed'
-    
-    const variants = {
-      primary: 'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500',
-      secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200 focus:ring-slate-500',
-      danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-      ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 focus:ring-slate-500'
-    }
 
     const sizes = {
       sm: 'px-3 py-1.5 text-sm',
@@ -23,11 +20,60 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'px-6 py-3 text-base'
     }
 
+    // Determine styles based on variant and theme
+    const getVariantStyle = (): React.CSSProperties => {
+      if (variant === 'primary') {
+        if (isDark) {
+          // Dark mode: transparent with blue border
+          return {
+            backgroundColor: 'transparent',
+            color: '#3b82f6',
+            border: '2px solid #3b82f6'
+          }
+        }
+        // Light mode: filled blue
+        return {
+          backgroundColor: '#2563eb',
+          color: 'white',
+          border: '2px solid #2563eb'
+        }
+      }
+      if (variant === 'secondary') {
+        return {
+          backgroundColor: isDark ? 'transparent' : 'var(--color-bg-card)',
+          color: 'var(--color-text)',
+          border: '1px solid var(--color-border)'
+        }
+      }
+      if (variant === 'danger') {
+        if (isDark) {
+          return {
+            backgroundColor: 'transparent',
+            color: '#ef4444',
+            border: '2px solid #ef4444'
+          }
+        }
+        return {
+          backgroundColor: '#dc2626',
+          color: 'white',
+          border: '2px solid #dc2626'
+        }
+      }
+      if (variant === 'ghost') {
+        return {
+          backgroundColor: 'transparent',
+          color: 'var(--color-text)'
+        }
+      }
+      return {}
+    }
+
     return (
       <button
         ref={ref}
-        className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+        className={`${baseStyles} ${sizes[size]} ${className}`}
         disabled={disabled || isLoading}
+        style={{ ...getVariantStyle(), ...style }}
         {...props}
       >
         {isLoading ? (
