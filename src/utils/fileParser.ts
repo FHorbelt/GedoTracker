@@ -342,22 +342,30 @@ function parseKmlContentMixed(kmlText: string, defaultFileName: string): KmlPars
       const nameElement = placemark.querySelector('name')
       const placemarkName = nameElement?.textContent?.trim() || ''
 
-      // Check for LineString (trajectory)
-      const lineString = placemark.querySelector('LineString')
-      if (lineString) {
-        const coordsElement = lineString.querySelector('coordinates')
-        const coordsText = coordsElement?.textContent?.trim()
-        if (coordsText) {
-          const points = parseLineStringCoordinates(coordsText)
-          if (points.length >= 2) {
-            trajectoryCounter++
-            result.trajectories.push({
-              name: placemarkName || `Trasse ${trajectoryCounter}`,
-              points
-            })
-          } else {
-            result.errors.push(`LineString "${placemarkName}": Zu wenige Koordinaten`)
+      // Check for LineString / MultiGeometry (trajectory)
+      const lineStrings = placemark.querySelectorAll('LineString')
+      if (lineStrings.length > 0) {
+        // Collect all coordinate arrays from every LineString in this Placemark
+        const segments: TrajectoryPoint[][] = []
+        lineStrings.forEach((ls) => {
+          const coordsText = ls.querySelector('coordinates')?.textContent?.trim()
+          if (coordsText) {
+            const pts = parseLineStringCoordinates(coordsText)
+            if (pts.length > 0) segments.push(pts)
           }
+        })
+
+        // Merge chained segments (e.g. MultiGeometry made of many 2-point segments)
+        const merged = mergeTrajectorySegments(segments)
+
+        if (merged.length >= 2) {
+          trajectoryCounter++
+          result.trajectories.push({
+            name: placemarkName || `Trasse ${trajectoryCounter}`,
+            points: merged
+          })
+        } else {
+          result.errors.push(`LineString "${placemarkName}": Zu wenige Koordinaten`)
         }
         return // Don't also parse as point
       }
@@ -415,6 +423,28 @@ function parseKmlContentMixed(kmlText: string, defaultFileName: string): KmlPars
     result.errors.push(`Fehler beim Parsen: ${error}`)
   }
 
+  return result
+}
+
+/**
+ * Merge a list of TrajectoryPoint arrays into one, deduplicating shared endpoints.
+ * Handles MultiGeometry made of many chained 2-point LineString segments.
+ */
+function mergeTrajectorySegments(segments: TrajectoryPoint[][]): TrajectoryPoint[] {
+  if (segments.length === 0) return []
+  const result: TrajectoryPoint[] = [...segments[0]]
+  for (let i = 1; i < segments.length; i++) {
+    const seg = segments[i]
+    if (seg.length === 0) continue
+    const last = result[result.length - 1]
+    const first = seg[0]
+    // Deduplicate shared endpoint (epsilon comparison for floating point)
+    if (Math.abs(last.lon - first.lon) < 1e-10 && Math.abs(last.lat - first.lat) < 1e-10) {
+      result.push(...seg.slice(1))
+    } else {
+      result.push(...seg)
+    }
+  }
   return result
 }
 
