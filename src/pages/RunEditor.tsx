@@ -164,7 +164,9 @@ export function RunEditor() {
     return allTrajectories.map(traj => ({
       id: traj.id,
       name: traj.name,
-      coordinates: traj.points.map(p => [p.lat, p.lon] as [number, number])
+      coordinates: (traj.segments ?? [traj.points]).map(seg =>
+        seg.map(p => [p.lat, p.lon] as [number, number])
+      )
     }))
   }, [allTrajectories])
 
@@ -1216,7 +1218,13 @@ export function RunEditor() {
                 trackInfo={trajectoryMode && !formData.gpsEnabled ? trackInfo : undefined}
                 upcomingPoints={trajectoryMode && !formData.gpsEnabled ? (trackInfo?.upcomingPoints?.slice(0, 5) || []) : []}
                 preventAutoZoom={true}
-                referenceTrajectories={allTrajectories.length > 0 ? referenceTrajectoryDisplays : []}
+                referenceTrajectories={
+                  allTrajectories.length > 0
+                    ? (selectedTrajectoryId
+                        ? referenceTrajectoryDisplays.filter(t => t.id === selectedTrajectoryId)
+                        : referenceTrajectoryDisplays)
+                    : []
+                }
                 selectedTrajectoryId={selectedTrajectoryId}
                 onTrajectorySelect={(id) => setSelectedTrajectoryId(id)}
               />

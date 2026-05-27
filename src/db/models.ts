@@ -205,7 +205,8 @@ export interface TrajectoryPoint {
 export interface ReferenceTrajectory {
   id: string
   name: string                    // Name from KML <Placemark><name> or <Folder><name>
-  points: TrajectoryPoint[]       // Original line points from KML
+  points: TrajectoryPoint[]       // Flat point array (legacy / spline input)
+  segments?: TrajectoryPoint[][]  // Connected sub-polylines (multi-polyline rendering)
   fixedPointFieldId?: string      // Optional link to FixedPointField (imported together from same KML)
   createdAt: string
   updatedAt: string

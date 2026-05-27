@@ -12,6 +12,7 @@ export interface ParseResult {
 export interface TrajectoryParseResult {
   name: string
   points: TrajectoryPoint[]
+  segments?: TrajectoryPoint[][]
 }
 
 export interface KmlParseResult {
@@ -355,17 +356,19 @@ function parseKmlContentMixed(kmlText: string, defaultFileName: string): KmlPars
           }
         })
 
-        // Merge chained segments (e.g. MultiGeometry made of many 2-point segments)
-        const merged = mergeTrajectorySegments(segments)
+        // Merge chained segments; disconnected sections become separate sub-polylines
+        const subPolylines = mergeTrajectorySegments(segments)
+        const validSubs = subPolylines.filter(sp => sp.length >= 2)
 
-        if (merged.length >= 2) {
+        if (validSubs.length === 0) {
+          result.errors.push(`LineString "${placemarkName}": Zu wenige Koordinaten`)
+        } else {
           trajectoryCounter++
           result.trajectories.push({
             name: placemarkName || `Trasse ${trajectoryCounter}`,
-            points: merged
+            points: validSubs.flat(),   // flat array for spline / legacy use
+            segments: validSubs         // sub-polylines for clean multi-polyline rendering
           })
-        } else {
-          result.errors.push(`LineString "${placemarkName}": Zu wenige Koordinaten`)
         }
         return // Don't also parse as point
       }
@@ -426,26 +429,42 @@ function parseKmlContentMixed(kmlText: string, defaultFileName: string): KmlPars
   return result
 }
 
+// ~11 m in degree space — bridges floating-point endpoint mismatches in KML exports
+// while still splitting at genuine geographic discontinuities (e.g. 37 km jumps).
+const CHAIN_THRESHOLD_DEG = 1e-4
+
 /**
- * Merge a list of TrajectoryPoint arrays into one, deduplicating shared endpoints.
- * Handles MultiGeometry made of many chained 2-point LineString segments.
+ * Merge a list of TrajectoryPoint arrays into connected sub-polylines.
+ * Consecutive segments whose endpoints are within CHAIN_THRESHOLD_DEG of each other
+ * are chained together (the near-duplicate start point is dropped).
+ * Segments with larger endpoint gaps start a new sub-polyline.
+ * Returns one array per connected section.
  */
-function mergeTrajectorySegments(segments: TrajectoryPoint[][]): TrajectoryPoint[] {
+function mergeTrajectorySegments(segments: TrajectoryPoint[][]): TrajectoryPoint[][] {
   if (segments.length === 0) return []
-  const result: TrajectoryPoint[] = [...segments[0]]
+
+  const subPolylines: TrajectoryPoint[][] = []
+  let current: TrajectoryPoint[] = [...segments[0]]
+
   for (let i = 1; i < segments.length; i++) {
     const seg = segments[i]
     if (seg.length === 0) continue
-    const last = result[result.length - 1]
+    const last = current[current.length - 1]
     const first = seg[0]
-    // Deduplicate shared endpoint (epsilon comparison for floating point)
-    if (Math.abs(last.lon - first.lon) < 1e-10 && Math.abs(last.lat - first.lat) < 1e-10) {
-      result.push(...seg.slice(1))
+    const dLon = Math.abs(last.lon - first.lon)
+    const dLat = Math.abs(last.lat - first.lat)
+
+    if (dLon < CHAIN_THRESHOLD_DEG && dLat < CHAIN_THRESHOLD_DEG) {
+      // Endpoints are close enough — chain by dropping the near-duplicate start point
+      current.push(...seg.slice(1))
     } else {
-      result.push(...seg)
+      // Genuine geographic gap — start a new sub-polyline
+      subPolylines.push(current)
+      current = [...seg]
     }
   }
-  return result
+  subPolylines.push(current)
+  return subPolylines
 }
 
 /**

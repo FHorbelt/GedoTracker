@@ -199,7 +199,7 @@ type ClickMode = 'none' | 'start'
 interface ReferenceTrajectoryDisplay {
   id: string
   name: string
-  coordinates: [number, number][]  // [lat, lon][]
+  coordinates: [number, number][][]  // [lat, lon][][] — multi-polyline (one array per connected section)
 }
 
 interface RunMapProps {
@@ -399,7 +399,7 @@ function MapBoundsHandler({
     // Add reference trajectory coordinates
     if (referenceTrajectories && referenceTrajectories.length > 0) {
       referenceTrajectories.forEach(traj => {
-        traj.coordinates.forEach(coord => points.push(coord))
+        traj.coordinates.forEach(seg => seg.forEach(coord => points.push(coord)))
       })
     }
 
@@ -578,7 +578,7 @@ function TrajectoryLabels({
     }
   }, [map])
 
-  // Compute label paths and render into SVG
+  // Render rotated text labels into the SVG overlay after every render
   const labelColor = isSelected ? '#86efac' : '#ffffff'
   const fontWeight = isSelected ? 600 : 500
 
@@ -586,156 +586,44 @@ function TrajectoryLabels({
     const svg = svgRef.current
     if (!svg) return
 
-    const zoom = map.getZoom()
-    const baseInterval = 60
-    const baseZoom = 19
-    const interval = baseInterval * Math.pow(2, Math.max(0, baseZoom - zoom))
-    const labels = sampleTrajectoryLabels(trajectory.coordinates, interval)
-
-    // Estimate text width in meters (~5m per character at zoom 19)
-    const textLenMeters = trajectory.name.length * 5 * Math.pow(2, Math.max(0, baseZoom - zoom)) * 0.6
-
-    // Clear previous content
     svg.innerHTML = ''
 
-    // Map pixel origin offset
-    const origin = map.getPixelOrigin()
+    const zoom = map.getZoom()
+    const baseZoom = 19
+    const interval = 60 * Math.pow(2, Math.max(0, baseZoom - zoom))
+    const labels = sampleTrajectoryLabels(trajectory.coordinates.flat(), interval)
 
-    // For each label, extract a segment of the trajectory around the label point and build an SVG path
-    const coords = trajectory.coordinates
-    if (coords.length < 2) return
+    labels.forEach(label => {
+      const pt = map.latLngToLayerPoint(L.latLng(label.lat, label.lon))
 
-    // Pre-compute cumulative distances
-    const cumDist: number[] = [0]
-    for (let i = 1; i < coords.length; i++) {
-      const d = haversineDistance(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1])
-      cumDist.push(cumDist[i - 1] + d)
-    }
-    const totalDist = cumDist[cumDist.length - 1]
+      // Group with position + rotation transform so text follows the track direction
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+      g.setAttribute('transform', `translate(${pt.x},${pt.y}) rotate(${label.rotation})`)
 
-    labels.forEach((label, idx) => {
-      // Find the distance along trajectory for this label
-      let labelDist = 0
-      for (let i = 1; i < coords.length; i++) {
-        const segDist = cumDist[i] - cumDist[i - 1]
-        const d = haversineDistance(coords[i - 1][0], coords[i - 1][1], label.lat, label.lon)
-        if (d < segDist * 1.5) {
-          // Approximate distance to this label
-          labelDist = cumDist[i - 1] + d
-          break
-        }
-        if (cumDist[i] > 0) {
-          // Check if label is between i-1 and i
-          const t = (labelDist - cumDist[i - 1]) / segDist
-          if (t >= 0 && t <= 1) break
-        }
-      }
+      // Dark halo for contrast against any map background
+      const shadow = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+      shadow.setAttribute('text-anchor', 'middle')
+      shadow.setAttribute('dominant-baseline', 'middle')
+      shadow.setAttribute('font-size', '11')
+      shadow.setAttribute('font-weight', String(fontWeight))
+      shadow.setAttribute('fill', 'rgba(0,0,0,0.9)')
+      shadow.setAttribute('stroke', 'rgba(0,0,0,0.7)')
+      shadow.setAttribute('stroke-width', '3')
+      shadow.setAttribute('stroke-linejoin', 'round')
+      shadow.textContent = trajectory.name
+      g.appendChild(shadow)
 
-      // Find labelDist more accurately by finding closest segment
-      let bestSegIdx = 0
-      let bestT = 0
-      let bestDist2 = Infinity
-      for (let i = 0; i < coords.length - 1; i++) {
-        const [lat1, lon1] = coords[i]
-        const [lat2, lon2] = coords[i + 1]
-        // Project label onto segment in lat/lon space
-        const dx = lon2 - lon1
-        const dy = lat2 - lat1
-        const len2 = dx * dx + dy * dy
-        if (len2 === 0) continue
-        const t = Math.max(0, Math.min(1, ((label.lon - lon1) * dx + (label.lat - lat1) * dy) / len2))
-        const pLat = lat1 + t * dy
-        const pLon = lon1 + t * dx
-        const dist2 = (label.lat - pLat) ** 2 + (label.lon - pLon) ** 2
-        if (dist2 < bestDist2) {
-          bestDist2 = dist2
-          bestSegIdx = i
-          bestT = t
-        }
-      }
-      labelDist = cumDist[bestSegIdx] + bestT * (cumDist[bestSegIdx + 1] - cumDist[bestSegIdx])
-
-      // Extract trajectory section: labelDist - textLenMeters/2 to labelDist + textLenMeters/2
-      const halfLen = Math.max(textLenMeters * 0.6, 20)
-      const startDist = Math.max(0, labelDist - halfLen)
-      const endDist = Math.min(totalDist, labelDist + halfLen)
-
-      // Sample points along trajectory in this range
-      const pathPoints: { x: number; y: number }[] = []
-      for (let i = 0; i < coords.length; i++) {
-        if (cumDist[i] >= startDist && cumDist[i] <= endDist) {
-          const pt = map.latLngToLayerPoint(L.latLng(coords[i][0], coords[i][1]))
-          pathPoints.push({ x: pt.x, y: pt.y })
-        }
-        // Also interpolate start/end points
-        if (i > 0 && cumDist[i - 1] < startDist && cumDist[i] > startDist) {
-          const t = (startDist - cumDist[i - 1]) / (cumDist[i] - cumDist[i - 1])
-          const lat = coords[i - 1][0] + t * (coords[i][0] - coords[i - 1][0])
-          const lon = coords[i - 1][1] + t * (coords[i][1] - coords[i - 1][1])
-          const pt = map.latLngToLayerPoint(L.latLng(lat, lon))
-          pathPoints.unshift({ x: pt.x, y: pt.y })
-        }
-        if (i > 0 && cumDist[i - 1] < endDist && cumDist[i] > endDist) {
-          const t = (endDist - cumDist[i - 1]) / (cumDist[i] - cumDist[i - 1])
-          const lat = coords[i - 1][0] + t * (coords[i][0] - coords[i - 1][0])
-          const lon = coords[i - 1][1] + t * (coords[i][1] - coords[i - 1][1])
-          const pt = map.latLngToLayerPoint(L.latLng(lat, lon))
-          pathPoints.push({ x: pt.x, y: pt.y })
-        }
-      }
-
-      if (pathPoints.length < 2) return
-
-      // Ensure text reads left-to-right: flip path if it goes right-to-left
-      const firstPt = pathPoints[0]
-      const lastPt = pathPoints[pathPoints.length - 1]
-      if (lastPt.x < firstPt.x) {
-        pathPoints.reverse()
-      }
-
-      // Build SVG path
-      const pathId = `trajPath-${trajectory.id}-${idx}`
-      let d = `M ${pathPoints[0].x} ${pathPoints[0].y}`
-      for (let i = 1; i < pathPoints.length; i++) {
-        d += ` L ${pathPoints[i].x} ${pathPoints[i].y}`
-      }
-
-      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      path.setAttribute('id', pathId)
-      path.setAttribute('d', d)
-      path.setAttribute('fill', 'none')
-      defs.appendChild(path)
-      svg.appendChild(defs)
-
-      // Shadow text (for readability)
-      const textShadow = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-      textShadow.setAttribute('font-size', '11')
-      textShadow.setAttribute('font-weight', String(fontWeight))
-      textShadow.setAttribute('fill', 'rgba(0,0,0,0.9)')
-      textShadow.setAttribute('stroke', 'rgba(0,0,0,0.7)')
-      textShadow.setAttribute('stroke-width', '3')
-      textShadow.setAttribute('stroke-linejoin', 'round')
-      const tpShadow = document.createElementNS('http://www.w3.org/2000/svg', 'textPath')
-      tpShadow.setAttributeNS('http://www.w3.org/1999/xlink', 'href', `#${pathId}`)
-      tpShadow.setAttribute('startOffset', '50%')
-      tpShadow.setAttribute('text-anchor', 'middle')
-      tpShadow.textContent = trajectory.name
-      textShadow.appendChild(tpShadow)
-      svg.appendChild(textShadow)
-
-      // Main text
+      // Foreground label
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+      text.setAttribute('text-anchor', 'middle')
+      text.setAttribute('dominant-baseline', 'middle')
       text.setAttribute('font-size', '11')
       text.setAttribute('font-weight', String(fontWeight))
       text.setAttribute('fill', labelColor)
-      const tp = document.createElementNS('http://www.w3.org/2000/svg', 'textPath')
-      tp.setAttributeNS('http://www.w3.org/1999/xlink', 'href', `#${pathId}`)
-      tp.setAttribute('startOffset', '50%')
-      tp.setAttribute('text-anchor', 'middle')
-      tp.textContent = trajectory.name
-      text.appendChild(tp)
-      svg.appendChild(text)
+      text.textContent = trajectory.name
+      g.appendChild(text)
+
+      svg.appendChild(g)
     })
   })
 
@@ -751,7 +639,7 @@ function ZoomToTrajectoryHandler({ referenceTrajectories }: { referenceTrajector
       if (referenceTrajectories && referenceTrajectories.length > 0) {
         const points: [number, number][] = []
         referenceTrajectories.forEach(traj => {
-          traj.coordinates.forEach(coord => points.push(coord))
+          traj.coordinates.forEach(seg => seg.forEach(coord => points.push(coord)))
         })
         if (points.length > 0) {
           const bounds = L.latLngBounds(points)
@@ -821,7 +709,7 @@ function MapZoomControls({
     if (referenceTrajectories && referenceTrajectories.length > 0) {
       const points: [number, number][] = []
       referenceTrajectories.forEach(traj => {
-        traj.coordinates.forEach(coord => points.push(coord))
+        traj.coordinates.forEach(seg => seg.forEach(coord => points.push(coord)))
       })
       if (points.length > 0) {
         const bounds = L.latLngBounds(points)
@@ -920,7 +808,7 @@ export function RunMap({
     }
     if (referenceTrajectories.length > 0) {
       // Calculate center of all trajectory coordinates
-      const allCoords = referenceTrajectories.flatMap(t => t.coordinates)
+      const allCoords = referenceTrajectories.flatMap(t => t.coordinates.flat())
       if (allCoords.length > 0) {
         const avgLat = allCoords.reduce((sum, c) => sum + c[0], 0) / allCoords.length
         const avgLon = allCoords.reduce((sum, c) => sum + c[1], 0) / allCoords.length

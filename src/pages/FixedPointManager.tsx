@@ -156,24 +156,21 @@ export function FixedPointManager() {
     const hasPoints = pr.fixedPoints.length > 0
     const hasTrajectories = pr.trajectories.length > 0
 
-    // Need either points with a name, or trajectories
+    // Need either points or trajectories, always need a name for the field
     if (!hasPoints && !hasTrajectories) return
-    if (hasPoints && !importName.trim()) return
+    if (!importName.trim()) return
 
     setIsImporting(true)
 
     try {
-      // Import fixed points
-      let fieldId: string | undefined
-      if (hasPoints) {
-        fieldId = await createFixedPointField(importName.trim(), pr.fixedPoints)
-      }
+      // Always create a FixedPointField so trajectories have a home (even with 0 points)
+      const fieldId = await createFixedPointField(importName.trim(), pr.fixedPoints)
 
-      // Import trajectories — link to field if both were imported from the same KML
+      // Import trajectories — always linked to the field
       for (let i = 0; i < pr.trajectories.length; i++) {
         const traj = pr.trajectories[i]
         const name = (trajectoryNames[i] !== undefined ? trajectoryNames[i] : traj.name) || traj.name
-        await createReferenceTrajectory(name, traj.points, hasPoints ? fieldId : undefined)
+        await createReferenceTrajectory(name, traj.points, fieldId, traj.segments)
       }
 
       // Move to next file or close

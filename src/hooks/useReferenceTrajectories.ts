@@ -53,7 +53,8 @@ export function useReferenceTrajectory(id?: string) {
 export async function createReferenceTrajectory(
   name: string,
   points: TrajectoryPoint[],
-  fixedPointFieldId?: string
+  fixedPointFieldId?: string,
+  segments?: TrajectoryPoint[][]
 ): Promise<string> {
   const id = uuidv4()
   const now = new Date().toISOString()
@@ -62,6 +63,7 @@ export async function createReferenceTrajectory(
     id,
     name,
     points,
+    segments,
     fixedPointFieldId,
     createdAt: now,
     updatedAt: now
