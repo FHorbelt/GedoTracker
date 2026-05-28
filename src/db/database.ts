@@ -11,6 +11,7 @@ import type {
   CompanyLogo,
   MapTile
 } from './models'
+import { DEFAULT_QUICK_SELECT_TARGET_IDS } from '../utils/targetPresets'
 
 export class AppDatabase extends Dexie {
   projects!: Table<Project>
@@ -159,8 +160,14 @@ db.on('ready', async () => {
   if (settingsCount === 0) {
     await db.settings.add({
       id: 'app-settings',
-      language: 'de'
+      language: 'de',
+      quickSelectTargetIds: DEFAULT_QUICK_SELECT_TARGET_IDS
     })
+  } else {
+    const existing = await db.settings.get('app-settings')
+    if (existing && !existing.quickSelectTargetIds) {
+      await db.settings.update('app-settings', { quickSelectTargetIds: DEFAULT_QUICK_SELECT_TARGET_IDS })
+    }
   }
 
   // === MIGRATION: Create MeasurementJobs for legacy runs ===

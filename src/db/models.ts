@@ -314,6 +314,7 @@ export interface AppSettings {
   lastBackup?: string
   compactView?: boolean // Minimizes project/job info cards for field work
   betaSplineEnabled?: boolean // Enables spline trajectory beta feature
+  quickSelectTargetIds?: string[] // Preset target IDs visible in the GNSS quick-select (min 2, max 6)
 }
 
 // Backup structure

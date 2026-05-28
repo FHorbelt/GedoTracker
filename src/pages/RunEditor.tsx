@@ -35,17 +35,11 @@ import { Play, Save, Plus, Trash2, MessageSquare, ArrowRight, ArrowLeft, X, Rota
 import { v4 as uuidv4 } from 'uuid'
 import { GpsTrackFilter } from '../utils/gpsFilter'
 import { trimGpsTrackMonotone } from '../utils/gpsTrackTrim'
+import { TARGET_BOARD_PRESETS, DEFAULT_QUICK_SELECT_TARGET_IDS } from '../utils/targetPresets'
+import { useSettings } from '../hooks/useSettings'
 
 type RunPhase = 'setup' | 'recording' | 'completed'
 
-const TARGET_BOARD_PRESETS: { image: string; label: string; board: TargetBoardInfo }[] = [
-  { image: '/targets/target-100-3.png', label: '100mm / 3mm', board: { size: '100', height: -6, thickness: 3 } },
-  { image: '/targets/target-200-3.png', label: '200mm / 3mm', board: { size: '200', height: -6, thickness: 3 } },
-  { image: '/targets/boden-100-200.png', label: 'Boden 200mm', board: { size: '100', height: 200, thickness: 0 } },
-  { image: '/targets/target-100-60.png', label: '100mm / 60mm', board: { size: '100', height: -6, thickness: 60 } },
-  { image: '/targets/target-200-60.png', label: '200mm / 60mm', board: { size: '200', height: -6, thickness: 60 } },
-  { image: '/targets/boden-100-400.png', label: 'Boden 400mm', board: { size: '100', height: 400, thickness: 0 } },
-]
 const DEFAULT_TARGET_BOARD: TargetBoardInfo = { size: '100', height: -6, thickness: 60 }
 
 function parseGermanNumber(value: string | number): number {
@@ -60,6 +54,12 @@ export function RunEditor() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const isEdit = !!runId
+  const { settings } = useSettings()
+  const quickSelectTargetIds = settings?.quickSelectTargetIds ?? DEFAULT_QUICK_SELECT_TARGET_IDS
+  const quickSelectPresets = useMemo(
+    () => TARGET_BOARD_PRESETS.filter(p => quickSelectTargetIds.includes(p.id)),
+    [quickSelectTargetIds]
+  )
 
   const { project } = useProject(projectId)
   const { job } = useMeasurementJob(jobId)
@@ -80,7 +80,7 @@ export function RunEditor() {
     startKm: '' as string | number,
     scannerType: 'GX50' as ScannerType,
     scannerAlignment: '80°/80°' as ScannerAlignment,
-    gpsEnabled: false,
+    gpsEnabled: true,
     speed: '0.8' as string | number,
     length: '' as string | number
   })
@@ -418,8 +418,8 @@ export function RunEditor() {
             routeNumber: lastRun?.routeNumber || '',
             trackType: lastRun?.trackType || 'RIG',
             objectDesignation: lastRun?.objectDesignation || '',
-            startKm: lastRun?.endKm ?? '',
-            gpsEnabled: lastRun?.gpsEnabled || false
+            startKm: lastRun != null ? (lastRun.endKm ?? '') : 0,
+            gpsEnabled: lastRun != null ? lastRun.gpsEnabled : true
           }))
 
           // Take over target board settings from last run's tracked points
@@ -1596,7 +1596,7 @@ export function RunEditor() {
                         {side === 'left' ? 'Links' : 'Rechts'}
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        {TARGET_BOARD_PRESETS.map(preset => {
+                        {quickSelectPresets.map(preset => {
                           const isSelected = target.size === preset.board.size
                             && target.height === preset.board.height
                             && target.thickness === preset.board.thickness
@@ -1872,7 +1872,7 @@ export function RunEditor() {
                 <div className="space-y-2">
                   <label className="block text-sm font-medium" style={{ color: 'var(--color-text)' }}>Zieltafel</label>
                   <div className="grid grid-cols-3 gap-2">
-                    {TARGET_BOARD_PRESETS.map((preset) => {
+                    {quickSelectPresets.map((preset) => {
                       const isSelected = targetBoard.size === preset.board.size
                         && targetBoard.height === preset.board.height
                         && targetBoard.thickness === preset.board.thickness

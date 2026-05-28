@@ -371,7 +371,10 @@
     "betaSplineEnabled": "Spline-Trajektorie (Beta)",
     "betaSplineDescription": "Aktiviert erweiterte Trajektorie-Berechnung mit Snap-to-Spline, Gleisseiten-Filter und manueller Anpassung.",
     "tools": "Tools",
-    "mx9Calibration": "MX9 Sensoreinmessung"
+    "mx9Calibration": "MX9 Sensoreinmessung",
+    "quickSelectTargets": "Targets Schnellauswahl",
+    "quickSelectTargetsDescription": "Wähle die Targets aus, die in der Schnellauswahl im GNSS-Modus erscheinen sollen (mind. 2, max. 6).",
+    "quickSelectTargetsCount": "{{count}} von {{max}} ausgewählt"
   },
   "measurementJob": {
     "title": "Messjob",

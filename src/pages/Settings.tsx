@@ -16,6 +16,12 @@ import { v4 as uuidv4 } from 'uuid'
 import { APP_VERSION } from '../version'
 import { MeasurementJob } from '../db/models'
 import { useLogos, addLogo, deleteLogo, setDefaultLogo, updateLogo, fileToBase64, getLogoDataUrl } from '../hooks/useLogos'
+import {
+  TARGET_BOARD_PRESETS,
+  DEFAULT_QUICK_SELECT_TARGET_IDS,
+  MIN_QUICK_SELECT_TARGETS,
+  MAX_QUICK_SELECT_TARGETS
+} from '../utils/targetPresets'
 
 export function Settings() {
   const { t, i18n } = useTranslation()
@@ -473,6 +479,76 @@ export function Settings() {
             </span>
             <ChevronRight className="w-5 h-5" style={{ color: 'var(--color-text-muted)' }} />
           </button>
+        </CardContent>
+      </Card>
+
+      {/* Target Schnellauswahl */}
+      <Card>
+        <CardContent>
+          <h3 className="text-md font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+            {t('settings.quickSelectTargets')}
+          </h3>
+          <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.quickSelectTargetsDescription')}
+          </p>
+          {(() => {
+            const selectedIds = settings?.quickSelectTargetIds ?? DEFAULT_QUICK_SELECT_TARGET_IDS
+            const selectedCount = selectedIds.length
+            const canDeselect = selectedCount > MIN_QUICK_SELECT_TARGETS
+            const canSelect = selectedCount < MAX_QUICK_SELECT_TARGETS
+
+            const toggle = (id: string) => {
+              const isSelected = selectedIds.includes(id)
+              if (isSelected) {
+                if (!canDeselect) return
+                updateSettings({ quickSelectTargetIds: selectedIds.filter(x => x !== id) })
+              } else {
+                if (!canSelect) return
+                const nextSet = new Set([...selectedIds, id])
+                const ordered = TARGET_BOARD_PRESETS.filter(p => nextSet.has(p.id)).map(p => p.id)
+                updateSettings({ quickSelectTargetIds: ordered })
+              }
+            }
+
+            return (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  {TARGET_BOARD_PRESETS.map(preset => {
+                    const isSelected = selectedIds.includes(preset.id)
+                    const isDisabled = isSelected ? !canDeselect : !canSelect
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => toggle(preset.id)}
+                        disabled={isDisabled}
+                        className="flex flex-col items-center rounded-lg p-1 transition-colors"
+                        style={{
+                          border: isSelected ? '2px solid #3b82f6' : '1px solid var(--color-border)',
+                          backgroundColor: isSelected ? (isDark ? 'rgba(59,130,246,0.15)' : '#eff6ff') : 'var(--color-bg-card)',
+                          opacity: isDisabled ? 0.4 : 1,
+                          cursor: isDisabled ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        <img
+                          src={preset.image}
+                          alt={preset.label}
+                          className="w-full h-auto object-contain"
+                          style={{ maxHeight: '48px', filter: isDark ? 'invert(1)' : 'none' }}
+                        />
+                        <span className="text-xs mt-1" style={{ color: isSelected ? '#3b82f6' : 'var(--color-text-secondary)' }}>
+                          {preset.label}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
+                  {t('settings.quickSelectTargetsCount', { count: selectedCount, max: MAX_QUICK_SELECT_TARGETS })}
+                </p>
+              </>
+            )
+          })()}
         </CardContent>
       </Card>
 

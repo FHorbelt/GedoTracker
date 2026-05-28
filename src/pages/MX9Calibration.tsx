@@ -724,7 +724,7 @@ export function MX9Calibration() {
               <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text)' }}>
                 {isDE ? POINT_LABELS[index].de : POINT_LABELS[index].en}
               </h3>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <InputWithUnit label="X" unit="m" value={point.x} onChange={v => updatePoint(index, 'x', v)} />
                 <InputWithUnit label="Y" unit="m" value={point.y} onChange={v => updatePoint(index, 'y', v)} />
                 <InputWithUnit label="Z" unit="m" value={point.z} onChange={v => updatePoint(index, 'z', v)} />
